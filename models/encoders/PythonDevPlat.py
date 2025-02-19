@@ -95,6 +95,9 @@ def IsFileExist(path):
 def IsDirExist(filePath):
     return os.path.exists(filePath)
 
+def GetFileNameList(filePath):
+    return os.listdir(filePath)
+
 def RemoveAllFile(filePath):
     files = os.listdir(filePath)
     for fileName in files:
@@ -126,20 +129,7 @@ def MakeFilePath(filePath, rootPath = ""):
             directoryPath.mkdir(parents = True, exist_ok = True)
             print(f"Directory '{directoryPath}' created successfully.")
         except OSError as error:
-            print(f"Error creating directory '{directory_path}': {error}")
-
-def FindLessValAfterStartIdxInSizeUpVec(val, vec, vecSize, startIndex):
-    for i in range(startIndex, vecSize):
-        if vec[i] <= val:
-            return i
-    return INVALID_NUM
-
-def FindLessValAfterStartIdxInSizeDownVec(val, vec, vecSize):
-    for i in range(0, vecSize):
-        #print(f"i = {str(i)}, vec[i] = {str(vec[i])}, val = {str(val)}")  
-        if vec[i] <= val:
-            return i
-    return INVALID_NUM
+            print(f"Error creating directory '{directoryPath}': {error}")
 
 def AdditionalWriteCsvFile(dstFilePathName, oriFilePathName):
     if not os.path.exists(oriFilePathName):

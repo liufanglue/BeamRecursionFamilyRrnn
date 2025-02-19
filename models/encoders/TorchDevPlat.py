@@ -33,8 +33,8 @@ INVALID_NUM = 0xFFFFFFFF
 # CSV转Torch 数据类 begin
 
 class TransCsvToTorch:
-    def __init__(self, filePath, codeFormat, dateCol, dataStartRank, dataStartCol, isNeedRevert):
-        #print(f"TransCsvToTorch enter filePath = {filePath}")
+    def __init__(self, filePath, codeFormat, dateCol, dataStartRank, dataStartCol, isNeedRevert, isSizeDown):
+        print(f"TransCsvToTorch enter filePath = {filePath}")
         if not os.path.exists(filePath):
             print(r'TransCsvToTorch path not exist')
             return
@@ -45,19 +45,36 @@ class TransCsvToTorch:
         dataTbl.fillna(method = 'ffill', inplace = True)
         # 如果填补后仍然有NaN，可以再使用0进行填补
         dataTbl.fillna('0', inplace = True)
-        if isNeedRevert == True:
+        if isNeedRevert:
             dataTbl = dataTbl.T
         dataSet = dataTbl.values
         dataSet = dataSet[dataStartRank : , : ]
         self.data = TransNumpyToFloatTorch(dataSet[ : , dataStartCol : ], True)
         dateList = [x[0] for x in dataSet[ : , dateCol : dateCol + 1].tolist()]
+        if isSizeDown:
+            self.data = torch.flip(self.data, dims = [0])
+            dateList.reverse()
+        #print(f"dateList = {dateList}")
+        dateList = [date.replace('年', '-').replace('月份', '-01') if isinstance(date, str) else date for date in dateList]
         self.date = torch.randn(self.data.shape[0])
         if dateCol != 0xFFFFFFFF:
-            try:
-                date = pd.to_datetime(dateList, format = "%Y-%m-%d").astype('int64').values / 1000000000
+            if (type(dateList[0]) is str):
+                #print(f"dateList[0] = {type(dateList[0])}")
+                if (dateList[0].count('-') == 2):
+                    date = pd.to_datetime(dateList, format = "%Y-%m-%d").astype('int64').values / 1000000000
+                if (dateList[0].count('/') == 2):
+                    date = pd.to_datetime(dateList, format = "%Y/%m/%d").astype('int64').values / 1000000000
+                if (dateList[0].count('.') == 2):
+                    date = pd.to_datetime(dateList, format = "%Y.%m.%d").astype('int64').values / 1000000000
+                if (dateList[0].count('-') == 1):
+                    date = pd.to_datetime(dateList, format = "%Y-%m").astype('int64').values / 1000000000
+                if (dateList[0].count('/') == 1):
+                    date = pd.to_datetime(dateList, format = "%Y/%m").astype('int64').values / 1000000000
+                if (dateList[0].count('.') == 1):
+                    date = pd.to_datetime(dateList, format = "%Y.%m").astype('int64').values / 1000000000
                 torchDate = torch.IntTensor(date)
                 self.date = torchDate
-            except ValueError as e:
+            if (type(dateList[0]) is float):
                 dateList = [str(int(dateEle)) for dateEle in dateList]
                 date = pd.to_datetime(dateList, format = "%Y%m%d").astype('int64').values / 1000000000
                 torchDate = torch.IntTensor(date)
@@ -84,7 +101,7 @@ class TransTorchToCsv:
         if os.path.exists(filePath):
             print(r'TransTorchToCsv path exist')
             return
-        if len(torchData.shape()) != 2:
+        if len(torchData.shape) != 2:
             print(r'torchData shape = {torchData.shape()}')
             return
         fileCsv = codecs.open(filePath, 'w+', codeFormat)  # 追加
@@ -2365,7 +2382,6 @@ def HandleRecurrentRnnNetWorkProcess(taskName, isBatchFirst, isNeedHidden, isNee
         model.SaveModuleWeight(modulePath)
         print(f"HandleRecurrentRnnNetWorkProcess time = {endTime - startTime}")
         return model
-#'''
 
 # RRNN 模型框架实现 end
 
@@ -2763,109 +2779,6 @@ def HandleSadsNetWorkProcess(taskName, isBatchFirst, isNeedHidden, isOutput, tra
     return model
 
 # Sads 模型框架实现 end
-
-'''
-# Temp HGRC begin
-
-from torch import nn
-from torch.nn import init
-import torch as T
-import torch.nn.functional as F
-from models.encoders.S4DWrapper import S4DWrapper
-from models.encoders.OrderedMemory import OrderedMemory
-from models.encoders.RecurrentGRCX import RecurrentGRCX
-
-class RecurrentRnnNetWork(nn.Module):
-    def __init__(self, config):
-        super(RecurrentRnnNetWork, self).__init__()
-        self.config = config
-        self.word_dim = config["hidden_size"]
-        self.hidden_dim = config["hidden_size"]
-        self.model_chunk_size = config["model_chunk_size"]
-        self.small_d = 64
-        self.chunk_size = 30
-
-        self.RNN = S4DWrapper(config)
-        self.initial_transform = nn.Linear(self.hidden_dim, self.hidden_dim)
-        if config and "rvnn_norm" in config:
-            self.norm = config["rvnn_norm"]
-        else:
-            self.norm = "layer"
-
-        if self.norm == "batch":
-            self.NT = nn.BatchNorm1d(self.hidden_dim)
-        elif self.norm == "skip":
-            pass
-        else:
-            self.NT = nn.LayerNorm(self.hidden_dim)
-
-        self.GRC = RecurrentGRCX(config)
-
-    def normalize(self, state):
-        if self.norm == "batch":
-            return self.NT(state.permute(0, 2, 1).contiguous()).permute(0, 2, 1).contiguous()
-        elif self.norm == "skip":
-            return state
-        else:
-            return self.NT(state)
-
-
-    def forward(self, input, input_mask):
-
-        sequence = self.RNN(input, input_mask)["sequence"]
-        osequence = sequence.clone()
-        oinput_mask = input_mask.clone()
-
-        sequence = self.normalize(self.initial_transform(sequence))
-        N, S, D = sequence.size()
-        if not self.config["chunk_mode_inference"] and not self.training:
-            self.chunk_size = S
-        else:
-            self.chunk_size = self.model_chunk_size
-
-        while S > 1:
-            N, S, D = sequence.size()
-            if S >= (self.chunk_size + self.chunk_size // 2):
-                if S % self.chunk_size != 0:
-                    e = ((S // self.chunk_size) * self.chunk_size) + self.chunk_size - S
-                    S = S + e
-                    pad = T.zeros(N, e, D).float().to(sequence.device)
-                    input_mask = T.cat([input_mask, T.zeros(N, e).float().to(sequence.device)], dim=-1)
-                    sequence = T.cat([sequence, pad], dim=-2)
-                    assert sequence.size() == (N, S, D)
-                    assert input_mask.size() == (N, S)
-                S1 = S // self.chunk_size
-                chunk_size = self.chunk_size
-            else:
-                S1 = 1
-                chunk_size = S
-            sequence = sequence.view(N, S1, chunk_size, D)
-            sequence = sequence.view(N * S1, chunk_size, D)
-
-            input_mask = input_mask.view(N, S1, chunk_size)
-            input_mask = input_mask.view(N * S1, chunk_size)
-
-            N0 = N
-            N, S, D = sequence.size()
-            assert N == N0 * S1
-
-            sequence = self.GRC(sequence, input_mask)["global_state"]
-            assert sequence.size() == (N, D)
-            sequence = sequence.view(N0, S1, D)
-            input_mask = input_mask.view(N0, S1, chunk_size)[:, :, 0]
-            S = S1
-            N = N0
-
-        assert sequence.size() == (N, 1, D)
-        global_state = sequence.squeeze(1)
-
-        return {"sequence": osequence,
-                "global_state": global_state,
-                "input_mask": oinput_mask,
-                "aux_loss": None}
-
-# Temp HGRC end
-'''
 
 # Mamba 模型框架实现 begin
 
@@ -3372,37 +3285,6 @@ def PrintModuleParaShape(module):
     for name, param in module.named_parameters():
         print(f"{name}: {param.size()}")
 
-def MergeTorchDataOutSizeUpLess(firstVec, firstData, secondVec, secondData, matchDim):
-    if not CheckMatchTorchDataOutFormat(firstVec, firstData, secondVec, secondData, matchDim):
-        return
-    firstIndex = 0
-    mergeData = torch.Tensor()
-    for firstDataEle in torch.unbind(firstData, matchDim):
-        secondIndex = FindLessValAfterStartIdxInSizeUpVec(firstVec[firstIndex], secondVec, secondVec.shape[0], secondIndex)
-        if secondIndex != INVALID_NUM:
-            tmpData = torch.cat((firstDataEle.unsqueeze(matchDim), secondData[secondIndex].unsqueeze(matchDim)), dim = 1)
-        else:
-            tmpData = torch.cat((firstDataEle.unsqueeze(matchDim), torch.zeros_like(secondData[0])).unsqueeze(matchDim), dim = 1)
-        mergeData = AddDataToTorch(mergeData, tmpData, matchDim)
-        firstIndex = firstIndex + 1
-    return mergeData
-
-def MergeTorchDataOutSizeDownLess(firstVec, firstData, secondVec, secondData, matchDim):
-    if not CheckMatchTorchDataOutFormat(firstVec, firstData, secondVec, secondData, matchDim):
-        print('MergeTorchDataOutSizeDownLess not CheckMatchTorchDataOutFormat')
-        return
-    firstIndex = 0
-    mergeData = torch.Tensor()
-    for firstDataEle in torch.unbind(firstData, matchDim):
-        secondIndex = FindLessValAfterStartIdxInSizeDownVec(firstVec[firstIndex], secondVec, secondVec.shape[0])
-        if secondIndex != INVALID_NUM:
-            tmpData = torch.cat((firstDataEle.unsqueeze(matchDim), secondData[secondIndex].unsqueeze(matchDim)), dim = 1)
-        else:
-            tmpData = torch.cat((firstDataEle.unsqueeze(matchDim), torch.zeros_like(secondData[0])).unsqueeze(matchDim), dim = 1)
-        mergeData = AddDataToTorch(mergeData, tmpData, matchDim)
-        firstIndex = firstIndex + 1
-    return mergeData
-
 def CheckMatchTorchDataOutFormat(firstVec, firstData, secondVec, secondData, matchDim):
     if (not IsVector(firstVec)) or (not IsVector(secondVec)):
         print(f"CheckMatchTorchDataOutFormat firstVec.shape = {firstVec.shape}, secondVec.shape = {secondVec.shape}")
@@ -3450,6 +3332,16 @@ def TransNumpyToIntTorch(numPyData, isTransStrToNum):
         npArray = TransNumpyDataToInt(numPyData)
     tensorData = torch.from_numpy(npArray)
     return tensorData.int()
+
+def TransNumDateToStrDate(oriTorchData, dateCol):
+    # 获取第一列数据
+    numDate = oriTorchData[ : , 0].numpy().astype(int)
+    # 转换为日期格式
+    datesStr = [datetime.strptime(str(date), '%Y%m%d').strftime('%Y/%m/%d') for date in numDate]
+    # 创建 DataFrame，将日期列放在第一列
+    dataDf = pd.DataFrame(oriTorchData.numpy()[ : , 1 : ], columns=[f'col_{i}' for i in range(1, oriTorchData.shape[1])])
+    dataDf.insert(0, 'date', datesStr)  # 将日期列插入到第一列
+    return dataDf
 
 def IsVector(torchData):
     if len(torchData.shape) != 1:
@@ -3505,16 +3397,57 @@ def IsTorchDataValid(torchData):
 
 def SelectTargetValByCol(torchData, colIndex, targetVal):
     if len(torchData.shape) < 2:
-        print(f"SelectTargetValByCol torchData.shape = {torchData.shape}")
-        return torch.empty((0, torchData.size(1)))
+        print(f"SelectTargetValByCol torchData.shape = {torchData.shape}, colIndex = {colIndex}, targetVal = {targetVal}")
+        return None
     indexList = torch.where(torchData[:, colIndex] == targetVal)[colIndex]
     # 打印选择出的行数据
-    rst = torch.empty((0, torchData.size(1)))
+    rst = None
     for index in indexList:
         rowData = torchData[index]
-        rst = torch.cat((rst, rowData.unsqueeze(0)), dim = 0)
+        rst = AddDataToTorch(rst, rowData.unsqueeze(0), 0)
     #print(f"SelectTargetValByCol rst = {rst}")
     return rst
+
+def MergeTargetValBySpecCol(firstData, firstColIndex, secondData, secondColIndex):
+    if (len(firstData.shape) != 2) or (len(secondData.shape) != 2) or (firstColIndex >= firstData.shape[1]) or (secondColIndex >= secondData.shape[1]):
+        print(f"MergeTargetValBySpecCol err, firstData = {firstData.shape}, firstColIndex = {firstColIndex}, secondData = {secondData.shape}, secondColIndex = {secondColIndex}")
+        return None
+    oriColNum = firstData.shape[1]
+    firstData = AddDataToTorch(firstData, torch.zeros(firstData.shape[0], secondData.shape[1] - secondColIndex - 1), 1)
+    for index, targetVal in enumerate(firstData[ : , firstColIndex]):
+        tempData = SelectTargetValByCol(secondData, secondColIndex, targetVal)
+        if (tempData != None):
+            firstData[index, oriColNum : ] = tempData[-1, secondColIndex + 1 : ]
+        else:
+            firstData[index, oriColNum : ] = torch.zeros(1, secondData.shape[1] - secondColIndex - 1)
+    return firstData
+
+def MergeSizeUpTorchDataOut(firstVec, firstData, secondVec, secondData):
+    if IsTorchDataEmpty(firstVec) or IsTorchDataEmpty(firstData) or IsTorchDataEmpty(secondVec) or IsTorchDataEmpty(secondData):
+        print(f"MergeSizeUpTorchDataOut firstVec = {firstVec.shape}, firstData = {firstData.shape}")
+        return firstData
+    if (firstVec.shape[0] != firstData.shape[0]) and (secondVec.shape[0] != secondData.shape[0]):
+        print(f"MergeSizeUpTorchDataOut firstVec = {firstVec.shape}, firstData = {firstData.shape}, secondVec = {secondVec.shape}, secondData = {secondData.shape}")
+        return firstData
+    print(f"MergeSizeUpTorchDataOut firstVec = {firstVec.shape}, firstData = {firstData.shape}, secondVec = {secondVec.shape}, secondData = {secondData.shape}")
+    rstData = None
+    for firstIndex in range(0, firstVec.shape[0]):
+        #print(f"firstIndex = {firstIndex}, firstVec = {firstVec.shape}, firstData = {firstData.shape}, secondVec = {secondVec.shape}, secondData = {secondData.shape}")
+        rstRank = firstData[firstIndex, : ].unsqueeze(0)
+        isFind = False
+        for secondIndex in range(secondVec.shape[0] - 1, -1, -1):
+            if(secondVec[secondIndex] < firstVec[firstIndex]):
+                rstRank = AddDataToTorch(rstRank, secondData[secondIndex, : ].unsqueeze(0), 1)
+                isFind = True
+                break
+        if not isFind:
+            rstRank = AddDataToTorch(rstRank, torch.zeros(1, secondData.shape[1]), 1)
+        rstData = AddDataToTorch(rstData, rstRank, 0)
+    if (rstData == None):
+        print(f"MergeSizeUpTorchDataOut rstData == None")
+    else:
+        print(f"MergeSizeUpTorchDataOut rstData == {rstData.shape}")
+    return rstData
 
 def SaveSpecDecimalNumSize(data, size):
     return (data * torch.pow(torch.tensor(10), size)).round() / (torch.pow(torch.tensor(10), size))
