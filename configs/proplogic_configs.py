@@ -2,9 +2,9 @@ class optimizer_config:
     def __init__(self):
         # optimizer config
         self.max_grad_norm = 1
-        self.batch_size = 64
-        self.train_batch_size = 64
-        self.dev_batch_size = 64
+        self.batch_size = 128
+        self.train_batch_size = 128
+        self.dev_batch_size = 128
         self.bucket_size_factor = 5
         self.DataParallel = False
         self.num_workers = 6
@@ -177,9 +177,9 @@ class MEGA_config(BiRecurrentGRC_config):
         self.early_stop_patience = 100
         self.scheduler = "linearWarmup"
         self.max_grad_norm = 1
-        self.batch_size = 64
-        self.train_batch_size = 64
-        self.dev_batch_size = 64
+        self.batch_size = 128
+        self.train_batch_size = 128
+        self.dev_batch_size = 128
         self.bucket_size_factor = 1
         self.warmup_steps = 3000
         self.warmup_init_lr = 1e-7

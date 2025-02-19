@@ -2,9 +2,9 @@ class optimizer_config:
     def __init__(self):
         # optimizer config
         self.max_grad_norm = 1
-        self.batch_size = 64
-        self.train_batch_size = 64
-        self.dev_batch_size = 64
+        self.batch_size = 256
+        self.train_batch_size = 256
+        self.dev_batch_size = 256
         self.bucket_size_factor = 5
         self.DataParallel = False
         self.num_workers = 6
@@ -121,13 +121,13 @@ class RecurrentRnnNetWork_config(HEBT_GRC_config):
         self.trainDataDim = self.input_size
         self.labelDataDim = self.input_size
         self.hiddenDim = 300
-        self.maxSeqLen = 30
-        self.splitPartNum = 7
-        self.crossLenRate = 0.01
+        self.maxSeqLen = 20
+        self.splitPartNum = 5
+        self.crossLenRate = 0
         self.maxLevelNum = 6
         self.manualSeed = 42
         self.resDropRate = 0.05
         self.batchSize = self.batch_size
         self.learnRate = 1e-3
-        self.weightDecay = 1e-8
+        self.weightDecay = 1e-2
 
