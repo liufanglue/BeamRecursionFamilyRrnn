@@ -2743,9 +2743,9 @@ class SadsNetWork(nn.Module):
             if parameters.grad is not None:
                 #grad = torch.autograd.grad(loss, parameters, retain_graph = True, allow_unused = True)
                 print(f"TrainNeuralNetWork dictName = {dictName}, key = {key}, gradmean = {parameters.grad.mean()}, gradvar = {parameters.grad.var()}, max = {parameters.grad.max()}, min = {parameters.grad.min()}")
-                print(f"TrainNeuralNetWork dictName = {dictName}, key = {key}, mean = {parameters.mean()}, var = {parameters.var()}, max = {parameters.max()}, min = {parameters.min()}")
             else:
                 print(f"TrainNeuralNetWork dictName = {dictName}, key = {key} grad is None")
+            print(f"TrainNeuralNetWork dictName = {dictName}, key = {key}, mean = {parameters.mean()}, var = {parameters.var()}, max = {parameters.max()}, min = {parameters.min()}")
 
     def GetModuleCalcRst(self, verifyData):
         with torch.no_grad():
@@ -3048,7 +3048,7 @@ class TransformerNetWork(nn.Module):
         self.positionalEncode = PositionalEncoding(hiddenDim, maxEncodeLen).to(self.device)
         self.encoderLayer = nn.TransformerEncoderLayer(hiddenDim, headNum).to(self.device)
         self.encoder = nn.TransformerEncoder(self.encoderLayer, layerNum).to(self.device)
-        self.fullConnectLayer = nn.Linear(hiddenDim, labelDataDim).to(self.device)
+        self.hidden2LabelDim = nn.Linear(hiddenDim, labelDataDim).to(self.device)
         self.maxEncodeLen = maxEncodeLen
         self.labelDataDim = labelDataDim
         self.batchSize = batchSize
@@ -3059,7 +3059,7 @@ class TransformerNetWork(nn.Module):
         x = self.embedding(x.to(self.device))
         x = self.positionalEncode(x)
         x = self.encoder(x)
-        x = self.fullConnectLayer(x)
+        x = self.hidden2LabelDim(x)
         return x
 
     def SetTrainDataInfo(self, inputData, labelData):
@@ -3250,7 +3250,7 @@ class MultiHeadAttention(nn.Module):
         self.key = nn.Linear(hiddenDim, hiddenDim)
         self.value = nn.Linear(hiddenDim, hiddenDim)
         self.dropout = nn.Dropout(p = dropOutRate)
-        self.fullConnectLayer = nn.Linear(hiddenDim, hiddenDim)
+        self.hidden2HiddenDim = nn.Linear(hiddenDim, hiddenDim)
 
     def forward(self, query, key, value, mask = None):
         batch_size = query.shape[0]
@@ -3266,7 +3266,7 @@ class MultiHeadAttention(nn.Module):
         attention = self.dropout(attention)
         # Combine the attention heads
         x = torch.matmul(attention, value).transpose(1, 2).contiguous().view(batch_size, -1, self.hiddenDim)
-        out = self.fullConnectLayer(x)
+        out = self.hidden2HiddenDim(x)
         return out
 
 # MultiHeadAttention 模型框架实现 end
