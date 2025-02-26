@@ -132,7 +132,7 @@ class BpNetWork(nn.Module):
         self.device = device
         self.layers = nn.ModuleList([nn.Linear(layersDim[i - 1], size) for i, size in enumerate(layersDim) if i > 0]).to(self.device)
         #self.relu = nn.ReLU().to(self.device)
-        self.leakRelu = nn.LeakyReLU(negative_slope = 0.03).to(self.device)
+        self.leakRelu = nn.LeakyReLU(negative_slope = 0.01).to(self.device)
         self.loss = 1000
         self.varMinusRst = 1000
 
@@ -2110,10 +2110,6 @@ class RecurrentRnnNetWork(nn.Module):
     def forward(self, input, input_mask):
         #print(f"RecurrentRnnNetWork input = {input.shape}, input_mask = {input_mask.shape}, self.isNeedMaskMem = {self.isNeedMaskMem}")
         self.batchSize = input.shape[0]
-        self.trainDataNum = input.shape[1]
-        self.trainDataDim = input.shape[2]
-        self.labelDataNum = 1
-        self.labelDataDim = self.trainDataDim
 
         '''
         #no mask

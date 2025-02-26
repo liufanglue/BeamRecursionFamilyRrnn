@@ -131,6 +131,19 @@ def MakeFilePath(filePath, rootPath = ""):
         except OSError as error:
             print(f"Error creating directory '{directoryPath}': {error}")
 
+def FindLessValAfterStartIdxInSizeUpVec(val, vec, vecSize, startIndex):
+    for i in range(startIndex, vecSize):
+        if vec[i] <= val:
+            return i
+    return INVALID_NUM
+
+def FindLessValAfterStartIdxInSizeDownVec(val, vec, vecSize):
+    for i in range(0, vecSize):
+        #print(f"i = {str(i)}, vec[i] = {str(vec[i])}, val = {str(val)}")  
+        if vec[i] <= val:
+            return i
+    return INVALID_NUM
+
 def AdditionalWriteCsvFile(dstFilePathName, oriFilePathName):
     if not os.path.exists(oriFilePathName):
         print(f"AdditionalWriteCsvFile oriFilePathName not exist, oriFilePathName = {oriFilePathName}")
