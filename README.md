@@ -446,6 +446,8 @@ The nomenclature in the codebase and in the paper are a bit different. We provid
 * HEBT_GRC_chunk10 == RIR-EBT-GRC (chunk 10)
 * MEGA == MEGA
 
+* RecurrentRnnNetWork == ERIR
+
 ### Citations:
 
 ```
